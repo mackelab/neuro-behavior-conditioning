@@ -214,6 +214,7 @@ plt.tight_layout()
 # save the figure
 file_name = f"Pan_a_vertical_schematic_latent_and_conditional_distribution"
 
+os.makedirs(f"{drop_dir}/figures/", exist_ok=True)
 # Save the figure
 plt.savefig(f"{drop_dir}/figures/{file_name}.pdf")
 plt.savefig(f"{drop_dir}/figures/{file_name}.png")
