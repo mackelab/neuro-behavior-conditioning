@@ -1,0 +1,32 @@
+!!python/object:argparse.Namespace
+
+# network parameters
+dim_red: 30
+forw_backw: True # rnn forward and backward
+latent_size: 20 # latent space
+mask_passed: 0 # pass mask to encoder
+nonlin: 1 # nonlinearity
+obs_noise: True # observation noise for behavior
+
+# training parameters
+seed: 1
+beta: 1
+freeze_after_training: 0 # freeze the decoder after training
+batch_size: 32
+
+# hardware considerations
+laptop: 0 # run on laptop
+slurm: 0 # compute on slurm
+save_files: 0
+
+# masking parameters
+zero_imp: 0 # zero imputation
+masktype: all_obs
+
+# wandb specific
+project_name: Final_runs_MONKEY_Reach_task
+exp: std # wand experiment name
+
+# postprocessing
+comp_calibration: 1
+

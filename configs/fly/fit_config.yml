@@ -1,0 +1,50 @@
+!!python/object:argparse.Namespace
+
+# network parameters
+dim_red: 30
+forw_backw: 1 # rnn forward and backward
+kernel_size: 16 # kernel of temporal convolution
+latent_size: 20 # latent space
+stride: 4 # stride of temporal convolution
+mask_passed: 0 # pass mask to encoder
+nonlin: 1 # nonlinearity
+groups_off: 0 # make the convolutions more expressive
+softplus: False
+obs_noise: True # observation noise
+
+# training parameters
+seed: 1
+epoch_start_masking: 250
+epochs: 3
+beta: 1
+fraction_full: 0.5 # how many values are observed
+freeze_after_training: 0 # freeze the decoder after training
+learning_rate: 0.0005
+rnn_orig: 0 # use Paul's original VAME rnn
+train_ratio: 0.95 # valid ratio is 1 - train_ratio
+valid_ratio: 0.50 # test ratio is 1 - valid_ratio of valid set 0.1 x 0.8 = 0.08 corresponds to 2800
+
+# data parameters
+seq_len: 64
+testset: 1 # do evaluation on test instead of validation set only at end
+test_batch_size: 512
+train_batch_size: 256
+
+# hardware considerations
+laptop: 0 # compute on laptop
+range_len: 28059
+slurm: 0 # compute on slurm
+save_files: 0
+
+# masking parameters
+zero_imp: 0 # zero imputation
+masktype: all_obs
+testmask: mask_left_claws
+
+# wandb specific
+project_name: FLY_claw_masking_experiment
+exp: std # wand experiment name
+
+# postprocessing
+comp_calibration: 1
+
