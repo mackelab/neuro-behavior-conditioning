@@ -1,17 +1,6 @@
 #!/bin/bash
 cd ../
 
-tmp_dir="./tmp/"
-
-# check if the tmp directory exists and create it if it does not
-if [ ! -d "$tmp_dir" ]; then
-    # create it if it does not exist
-    mkdir "$tmp_dir"
-    echo "Temporary directory created at: $tmp_dir"
-else
-    echo "Temporary directory already exists at: $tmp_dir"
-fi
-
 echo "running GLVM many seeds..."
 
 
