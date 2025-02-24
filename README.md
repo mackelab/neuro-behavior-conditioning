@@ -38,7 +38,7 @@ ipython 00_GLVM_generate_dataset.py
 ### Fly walking behavior
 
 We made our dataset of walking behavior of flies (Drosophila melanogaster) publicly available at 
-https://zenodo.org/records/11002776. Please download it from there and store it in `./data/fly/`. Please ensure the download was successful using [04_FLY_read_in_data.ipynb](./notebooks/fly/04_FLY_read_in_data.ipynb) in `notebooks/fly/`
+https://zenodo.org/records/11002776. Please download it from there and store it in `./data/fly/`.  Please ensure the download was successful using [04_FLY_read_in_data.ipynb](./notebooks/fly/04_FLY_read_in_data.ipynb) in `notebooks/fly/`
 
 ### Monkey reach task 
 
