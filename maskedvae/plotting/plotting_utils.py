@@ -12,7 +12,7 @@ def cm2inch(cm, cm2=None, INCH=2.54):
         return cm / INCH
 
 
-def make_col_dict(task="fly", n_masks=5):
+def make_col_dict(task="fly", n_masks=5, samemask=False):
     if task == "fly":
         col_dict = {
             mask: {masked: "blue" for masked in [True, False]}
@@ -26,24 +26,87 @@ def make_col_dict(task="fly", n_masks=5):
         print(f"mask {n_masks-2} is all observed data, mask  {n_masks-1} is new data")
         # return 3 dark red tones
         red_col = [
-            "darksalmon",
+            "darkred" if samemask else "darksalmon",
             "darkred",
-            "firebrick",
+            "darkred" if samemask else "tomato",
             "maroon",
             "indianred",
             "salmon",
-            "tomato",
+            "firebrick",
             "mistyrose",
         ]
         blue_col = [
-            "blue",
+            "midnightblue" if samemask else "blue",
             "midnightblue",
-            "darkblue",
+            "midnightblue" if samemask else "slateblue",
             "steelblue",
             "cornflowerblue",
             "lightsteelblue",
             "aliceblue",
-            "lavender",
+            "darkblue",
+        ]
+
+        if len(red_col) < (n_masks - 2):
+            while len(red_col) < n_masks:
+                red_col = red_col + red_col
+                blue_col = blue_col + blue_col
+
+        # all obs and new data
+        last_colors_red = ["lightcoral", "black"]
+        last_colors_blue = ["dodgerblue", "grey"]
+
+        # ensure the last two colors for all obs and new mask are the same indeoendent of number of masks
+        red_col = red_col[: n_masks - 2] + last_colors_red
+        blue_col = blue_col[: n_masks - 2] + last_colors_blue
+
+        col_dict = {
+            mask: {masked: "blue" for masked in range(n_masks)}
+            for mask in [
+                "zero_imputation",
+                "zero_imputation_mask_concatenated_encoder_only",
+            ]
+        }
+        for mask_n in range(n_masks):
+            col_dict["zero_imputation"][mask_n] = blue_col[mask_n]
+            col_dict["zero_imputation_mask_concatenated_encoder_only"][
+                mask_n
+            ] = red_col[mask_n]
+
+    return col_dict
+
+
+def make_col_dict_new(task="fly", n_masks=5, samemask=False):
+    if task == "fly":
+        col_dict = {
+            mask: {masked: "blue" for masked in [True, False]}
+            for mask in ["mask_left_claws", "all_obs"]
+        }
+        col_dict["mask_left_claws"][True] = "darkred"
+        col_dict["mask_left_claws"][False] = "lightcoral"
+        col_dict["all_obs"][True] = "midnightblue"
+        col_dict["all_obs"][False] = "dodgerblue"
+    elif task == "gaussian":
+        print(f"mask {n_masks-2} is all observed data, mask  {n_masks-1} is new data")
+        # return 3 dark red tones
+        red_col = [
+            "darkred" if samemask else "#991E29",
+            "darkred",
+            "darkred" if samemask else "#601A26",
+            "maroon",
+            "indianred",
+            "salmon",
+            "firebrick",
+            "mistyrose",
+        ]
+        blue_col = [
+            "midnightblue" if samemask else "#234558",
+            "midnightblue",
+            "midnightblue" if samemask else "#1E3B48",
+            "#383B57",
+            "cornflowerblue",
+            "lightsteelblue",
+            "aliceblue",
+            "darkblue",
         ]
 
         if len(red_col) < (n_masks - 2):

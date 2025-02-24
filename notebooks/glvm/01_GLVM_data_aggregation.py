@@ -3,8 +3,9 @@
 
 # In[2]:
 
-
-get_ipython().run_line_magic("cd", "../")
+# pylint: disable=undefined-variable
+get_ipython().run_line_magic("cd", "../../")
+# pylint: enable=undefined-variable
 
 import copy
 import os
@@ -17,8 +18,9 @@ import yaml
 
 from maskedvae.utils.utils import KLD_uvg, mse
 
+# pylint: disable=undefined-variable
 get_ipython().run_line_magic("matplotlib", "inline")
-
+# pylint: enable=undefined-variable
 
 # folder name for evaluation
 date = datetime.now().strftime("%d%m%Y_%H%M" "%S")  # more easily readable

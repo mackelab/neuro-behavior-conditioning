@@ -21,6 +21,7 @@ from maskedvae.utils.utils import (
     save_pickle,
     save_yaml,
     save_run_directory,
+    csv_to_simple_yaml,
 )
 from maskedvae.model.masks import MultipleDimGauss
 

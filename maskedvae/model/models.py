@@ -1,4 +1,5 @@
 import time
+import sys
 import os
 import pickle
 
@@ -7,18 +8,29 @@ from copy import deepcopy
 import wandb
 import torch
 import torch.nn as nn
+import pandas as pd
 from torch.utils.data import DataLoader
 import numpy as np
+import wandb
 
-from maskedvae.utils.loss import masked_GNLL_loss_fn, masked_MSE_loss_fn
+from maskedvae.utils.loss import (
+    masked_GNLL_loss_fn,
+    masked_MSE_loss_fn,
+    masked_rec_loss,
+    eval_RAE_z_reg,
+    eval_VAE_prior,
+)
 from maskedvae.model.masks import MultipleDimGauss
-from maskedvae.model.networks import GLVM_VAE
+from maskedvae.model.networks import GLVM_VAE, AE_model
 from maskedvae.utils.utils import (
     ensure_directory,
     reverse_non_all_obs_mask,
     return_posterior_expectation_and_variance_multi_d,
+    cpu,
+    get_mask,
 )
 from maskedvae.plotting.plotting import test_visualisations_gauss_one_plot
+from maskedvae.utils.evaluate import run_and_eval
 
 
 class ModelGLVM(object):
@@ -37,27 +49,47 @@ class ModelGLVM(object):
     ):
 
         """
-        Initialize with a single dict that contains the parameters for the network.
-        the chosen dataset, the infernece network model and the training device
-        All other parameters for training and evaluation can be changed manually after initialization.
+        Masked VAE training for the GLVM dataset
+
+        This class is used to train a masked VAE on the GLVM dataset.
+        The class is initialized with a set of parameters
+        for the network, the chosen dataset, the inference network model and the training device.
+        The class contains the main training loop .fit() and evaluation functions for the model.
 
         Parameters
         ----------
         args: dict
             All parameters that should be changed / added to the default attributes of the network class.
 
-        args: dataset
-            Dataset class
+        dataset_train: dataset
+            Training dataset
 
-        args: inference_model
+        dataset_valid: dataset
+            Validation dataset
+
+        dataset_test: dataset
+            Test dataset
+
+        logs: dict
+            Dictionary to store the training logs
+
+        inference_model: nn.Module
             Inference network with stanard VAE as default
 
         args: device
             cpu if no gpu detected
 
-        Attributes
+        Generator: nn.Module
+            Mask generator class
+
+        nonlin: nn.Module
+            Nonlinearity for the network
+
+        dropout: float
+            Dropout rate for the network
+
+
         ----------
-        TODO: add here
 
         """
         self.args = args
@@ -1043,3 +1075,710 @@ class ModelGLVM(object):
         self.best_model.vae.eval()
         print(self.best_model.vae)
         print("start eval")
+
+
+# ------------------ monkey ------------------
+class MonkeyModel:
+    def __init__(self, net_pars):
+        """
+        Masked VAE training for the Monkey dataset
+
+        This class is used to train a masked VAE on the Monkey dataset.
+        The class is initialized with a set of parameters
+        for the network
+        The class contains the main training loop .fit() and evaluation functions for the model.
+
+        Parameters
+        ----------
+        net_pars: dict
+            All parameters that should be changed / added to the default attributes of the network class.
+
+        Attributes
+        ----------
+
+        net : instance of AE_model
+            The network containing encoding and decoding function
+        grad_norm : float
+            Gradient norm used for gradient clipping of the network weights
+        weight_decay :
+            Weight decay used for the optimizer
+        vae_beta: float
+            beta parameter scaling the KL term between posterior and prior
+        RAE_beta: float
+            Penalty used when training RAE models
+        lasso_lambda : bool
+            Parameter scaling the degree of sparsity (see http://proceedings.mlr.press/v80/ainsworth18a/ainsworth18a.pdf)
+        loss_facs : dict of floats
+            Scaling for the loss of each output. Could be used to balance the scale of the different losses.
+
+        filename : str
+            Name of the file (actual location will have .pkl added)
+        exp_params : dict
+            Optional dict of parameters used for the specific submitted job
+        description : str
+            Optional description of the experiment
+
+        col_dict : dict
+            This dictionary contains all information on training progress.
+            It get's saved seperately under filename_dicts for easy access.
+            Default parameters for evaluation
+        eval_params : list of dicts
+            Evaulation can be run on different sessions for example.
+            Overwrite defaults for each seperate evaluation with the given parameters.
+
+        _iter_count : int
+            Current training iteration (we don't use epochs)
+        """
+
+        self.net = (
+            AE_model(net_pars).cuda()
+            if torch.cuda.is_available()
+            else AE_model(net_pars)
+        )
+
+        # init parameters that get adjusted outside
+        self.sessions = None
+        self.vae_beta = None
+        self.vae_warmup = None
+        self.prior_sig = None
+        self.fps = None
+        self.warmup = None
+        self.lasso_lr = None
+        self.min_shared_sessions = None
+        self.fps_thr = None
+        self.iter_start_masking = None
+        self.max_iters = None
+        self.cross_loss = None
+        self.nll_beta = None
+        self.batch_size = None
+        self.batch_T = None
+        self.mask_ratio = None
+        self.print_freq = None
+        self.full_mask = None
+        self.masks = None
+        self.half = None
+        self.mask_choice = None
+        self.lr = None
+        self.opt_shared_pars = None
+        self.opt_session_pars = None
+        self.optim_shared = None
+        self.optims_session = None
+        self.optim_lasso = None
+        self.gen_wm_prior = None
+        self.gen_wmats = None
+        self.chosen_masks = None
+
+        self.grad_norm = 0.03
+        self.weight_decay = 0.2
+        self.RAE_beta = 0.2
+        self.vae_beta = 0.2
+        self.lasso_lambda = 0.0
+        self.loss_facs = {k: 1 for k in self.net.outputs}
+
+        self.filename = None
+        self.exp_params = None
+        self.description = None
+
+        self.col_dict = {}
+        self.eval_params = [{}]
+
+        self._iter_count = 0
+
+    def init_dicts(self):
+        """Initialize some standard parameters tracked during training"""
+
+        self.col_dict["exp_params"] = self.exp_params
+        self.col_dict["eval_params"] = self.eval_params
+        self.col_dict["cost_hist"] = pd.Series()
+        self.col_dict["update_time"] = pd.Series()
+        self.col_dict["zmask_l0"] = pd.Series()
+        self.col_dict["zmask_l1"] = pd.Series()
+        self.col_dict["df_perf"] = None
+
+    def eval_func(self, data_train, data_val):
+        """Evaluation function called after every print_freq training iterations
+
+        Parameters
+        ----------
+        data_train / data_val: dict
+            Training / test dataset. Linear regressors are estimated on training data and then applied to test data.
+            Might not be necessary ?
+        """
+        _, df_perf = run_and_eval(
+            self,
+            data_train,
+            data_val,
+            self.eval_params["sessions"],
+            self.eval_params["eval_vars"],
+            self.eval_params["t_slice"],
+            None,
+            self.eval_params["inp_mask"],
+        )
+
+        if self.col_dict["df_perf"] is None:
+            self.col_dict["df_perf"] = pd.DataFrame(df_perf.stack([0])).transpose()
+            self.col_dict["df_perf"].set_index(
+                np.array([self._iter_count]), inplace=True
+            )
+        else:
+            self.col_dict["df_perf"] = pd.concat(
+                [
+                    self.col_dict["df_perf"],
+                    pd.Series(df_perf.stack([0]), name=self._iter_count),
+                ],
+                axis=1,
+            )
+
+    def get_structured_mask(self, dim, mask_arr=["xa_m", "xb_y", "xb_d"], first=True):
+        """Create a structured mask for the network outputs"""
+        mask_ = torch.ones(dim)
+
+        for k in mask_arr:
+            # check if the first few letters fit the outouts to allow for partial masking
+            if k[:4] in self.net.outputs:
+                if len(k) <= 4:
+                    # this means all xa_m or all xb_y or all xb_d should be masked
+                    arr_len = self.net.n_outputs
+                else:
+                    # else read in the number of elements that should be masked
+                    arr_len = int(k[5:])
+                if first:
+                    # mask the first arr_len elements
+                    mask_[self.net.out_inds[k[:4]]][:arr_len] = 0
+                else:
+                    # mask the last arr_len elements
+                    mask_[self.net.out_inds[k[:4]]][arr_len:] = 0
+        return mask_.cuda() if torch.cuda.is_available() else mask_
+
+    def fit(
+        self,
+        data_train=None,
+        data_val=None,
+        batch_size=32,
+        batch_T=100,
+        mask_ratio=0.7,
+        max_iters=50000,
+        learning_rate=5e-4,
+        print_output=True,
+        print_freq=100,
+        full_mask=0.5,
+        chosen_masks=None,
+    ):
+        """
+        Function that trains the network.
+
+        Parameters
+        ----------
+        data_train / data_val: dict
+            Training / test dataset.
+        batch_size : int
+            Batch size for SGD
+        batch_T : int
+            Length of the traces used for training
+        mask_ratio: float between 0 and 1
+            At every training iteration we randomely split the
+            trace into two sets using the given ratio.
+            One of them (with size mask_ratio) is zeroed out in
+            the networkinput and the other (1 - mask_ratio) when computing the loss function.
+        max_iters : int
+            Number of training iterations. This amounts to the total
+            amount of gradient updates and not passes through the dataset (epochs).
+        learning_rate : float
+            Learning rate
+        print_output : bool
+            Whether to print model evaluations throughout training
+        print_freq : int
+            After every print_freq iterations the evaluation function
+            is run, the model is stored and training progress is printed
+        """
+
+        self.batch_size = batch_size
+        self.batch_T = batch_T
+        self.mask_ratio = mask_ratio
+        self.print_freq = print_freq
+        self.full_mask = full_mask
+        self.lr = learning_rate
+
+        self.init_dicts()
+
+        # ------------------ specifiy the masks ------------------
+        self.masks = {}
+        self.half = str(int(self.net.out_inds["xa_m"].stop / 2))
+        self.masks["xa_m_first_half"] = self.get_structured_mask(
+            self.net.n_outputs, mask_arr=[f"xa_m_{self.half}"], first=True
+        )
+        self.masks["xa_m_last_half"] = self.get_structured_mask(
+            self.net.n_outputs, mask_arr=[f"xa_m_{self.half}"], first=False
+        )
+
+        # specify the masks where 5, 20, 50 etc. neurons are masked if passed to the function
+        # the defailt is None resulting only in xa_m and xb_yd being masked resulting only in
+        # either p
+        if chosen_masks is not None:
+            for key in chosen_masks:
+                self.masks[key] = self.get_structured_mask(
+                    self.net.n_outputs, mask_arr=[key]
+                )
+        # all neurons are masked
+        self.masks["xa_m"] = self.get_structured_mask(
+            self.net.n_outputs,
+            mask_arr=[
+                "xa_m",
+            ],
+        )
+
+        # set behavioral masks together with the neural mask for
+        # either the y (position) or d (velocity) input
+        if "xb_y" in self.net.inputs:
+            self.masks["xa_m"] = self.get_structured_mask(
+                self.net.n_outputs, mask_arr=["xa_m"]
+            )
+
+            self.masks["xb_yd"] = self.get_structured_mask(
+                self.net.n_outputs, mask_arr=["xb_y"]
+            )
+        if "xb_d" in self.net.inputs:
+
+            self.masks["xb_yd"] = self.get_structured_mask(
+                self.net.n_outputs, mask_arr=["xb_d"]
+            )
+            self.masks["xa_m"] = self.get_structured_mask(
+                self.net.n_outputs, mask_arr=["xa_m"]
+            )
+        if "xb_d" in self.net.inputs and "xb_y" in self.net.inputs:
+            self.masks["xb_yd"] = self.get_structured_mask(
+                self.net.n_outputs, mask_arr=["xb_d", "xb_y"]
+            )
+
+        # unless specifically specified we take all neuro and all behavior masks
+        if chosen_masks is None:
+            self.chosen_masks = ["xa_m", "xb_yd"]
+        else:
+            self.chosen_masks = chosen_masks
+
+        print("Chosen masks: ", self.chosen_masks)
+
+        # ------------------------------------------------
+        #                    TRAINING
+        # ------------------------------------------------
+
+        last_print = 0
+        tot_t = 0
+
+        self.opt_shared_pars = []
+        self.opt_session_pars = [[] for _ in range(self.net.n_sessions)]
+
+        # sort parameters into shared and session specific
+        # if they start with session they are session specific
+        for n, f in self.net.named_parameters():
+            if "session" not in n:
+                self.opt_shared_pars += [f]
+            else:
+                # find separation by dot e.g. session_outp.3.0.bias -> 3
+                d1 = n.index(".")
+                self.opt_session_pars[int(n[d1 + 1 : n.index(".", d1 + 1)])] += [f]
+
+        self.optim_shared = torch.optim.AdamW(
+            self.opt_shared_pars, lr=self.lr, weight_decay=self.weight_decay
+        )
+        self.optims_session = [
+            torch.optim.AdamW(p, lr=self.lr, weight_decay=self.weight_decay)
+            for p in self.opt_session_pars
+        ]
+
+        # sparsity inducing lasso loss
+        self.optim_lasso = torch.optim.SGD(
+            [self.net.lasso_W], lr=self.lasso_lr, momentum=0
+        )
+
+        # This prevents overfitting
+        # generate a prior distribution for the weights of the network
+        self.gen_wm_prior = torch.distributions.Normal(0, 1)
+        self.gen_wmats = []
+
+        # get all weight matrices of the decoder cnn
+        for layer in self.net.cnn1d_dec.modules():
+            if isinstance(layer, nn.Conv1d):
+                self.gen_wmats.append(layer.weight)
+
+        # get all session output weight matrices of the network
+        for t in self.net.session_outp:
+            for layer in t.modules():
+                if isinstance(layer, nn.Conv1d):
+                    self.gen_wmats.append(layer.weight)
+
+        while self._iter_count < max_iters:
+
+            t0 = time.time()
+            tot_cost = []
+            separate_loss = []
+            self.net.train()
+
+            for _ in range(self.print_freq):
+
+                batch = data_train.get_train_batch(
+                    self.batch_size, batch_T, to_gpu=torch.cuda.is_available()
+                )
+                for k in self.net.scaling:
+                    if self.net.ifdimwise_scaling:
+                        for ii in range(batch[k].shape[1]):
+                            batch[k][:, ii] = self.net.dimwise_scaling[k + str(ii)][
+                                batch["i"]
+                            ][0] * (
+                                batch[k][:, ii]
+                                - self.net.dimwise_scaling[k + str(ii)][batch["i"]][1]
+                            )
+                    else:
+                        batch[k] = self.net.scaling[k][batch["i"]][0] * (
+                            batch[k] - self.net.scaling[k][batch["i"]][1]
+                        )  # Scale traces for training
+
+                # cross masking possibility but here we use the structured mask
+                # with loss computation on the observed data
+                cross_mask = get_mask(self.net.n_outputs, self.mask_ratio, off=True)
+                assert (
+                    cross_mask[0] == 1
+                ), "first output should not be masked"  # pylint: disable=unsubscriptable-object
+
+                # only apply masks with probablity of 1-full_mask, i.e sometimes it is all observed
+                all_obs = np.random.choice(
+                    [True, False], p=[self.full_mask, 1 - self.full_mask]
+                )
+                # only select randomly between the chosen masks
+                self.mask_choice = np.random.choice(self.chosen_masks)
+
+                if all_obs or self._iter_count < self.iter_start_masking:
+                    struct_mask = torch.ones_like(cross_mask)
+                else:
+                    struct_mask = self.masks[self.mask_choice]
+
+                assert (
+                    "xa_m" in self.net.inputs
+                ), "xa_m should be in inputs otherwise masking is not working"
+
+                # ------------------------------------------------
+                # actual run model on batch data and get outputs
+                # ------------------------------------------------
+                outputs = self.net(
+                    batch,
+                    struct_mask[: self.net.n_inputs],
+                    scale_output=False,
+                )
+
+                self.optim_shared.zero_grad()
+                self.optims_session[batch["i"]].zero_grad()
+                self.optim_lasso.zero_grad()
+
+                r_loss = 0
+                r_sep_loss = np.zeros(len(self.net.outputs))
+                obs_var_mean = {ki: [] for ki in range(len(self.net.outputs))}
+                obs_var_std = {ki: [] for ki in range(len(self.net.outputs))}
+
+                # loop through all outputs and compute the loss
+                for ki, k in enumerate(self.net.outputs):
+                    # if all observed or in the phase where we do not yet mask
+                    if all_obs or self._iter_count < self.iter_start_masking:
+                        l = masked_rec_loss(
+                            batch[k],
+                            outputs[k],
+                            loss=self.net.outputs[k],
+                            mask=struct_mask[self.net.out_inds[k]],
+                            warmup=self.warmup,
+                            obs_var=outputs[k + "_noise"]
+                            if "xb" in k and self.net.obs_noise
+                            else None,
+                            nll_beta=self.nll_beta,
+                        )
+                    else:  # masking loss
+                        l = masked_rec_loss(
+                            batch[k],
+                            outputs[k],
+                            loss=self.net.outputs[k],
+                            mask=(1 - struct_mask[self.net.out_inds[k]])
+                            if self.cross_loss
+                            else struct_mask[self.net.out_inds[k]],
+                            warmup=self.warmup,
+                            obs_var=outputs[k + "_noise"]
+                            if "xb" in k and self.net.obs_noise
+                            else None,
+                            nll_beta=self.nll_beta,
+                        )
+
+                    r_loss += torch.mean(l) * self.loss_facs[k]  # mean over batches
+                    r_sep_loss[ki] = torch.mean(l)
+                    obs_var_mean[ki] = (
+                        torch.mean(outputs[k + "_noise"], axis=(0, 2))
+                        .detach()
+                        .cpu()
+                        .numpy()
+                        if "xb" in k and self.net.obs_noise
+                        else 0
+                    )
+                    obs_var_std[ki] = (
+                        torch.std(outputs[k + "_noise"], axis=(0, 2))
+                        .detach()
+                        .cpu()
+                        .numpy()
+                        if "xb" in k and self.net.obs_noise
+                        else 0
+                    )
+                    # track loss of x and y separately - switch off sum reduction across dimensions
+                    if k == "xb_y":
+                        # cross mask or actual mask can lead to zero loss - check if all inputs are zero - in that case skip the logging
+                        # 1-mask if cross mask is used and we are in the masking regime
+                        loss_mask = (
+                            (1 - struct_mask[self.net.out_inds[k]])
+                            if (
+                                self.cross_loss
+                                and self._iter_count > self.iter_start_masking
+                            )
+                            else struct_mask[self.net.out_inds[k]]
+                        )
+                        if all_obs:  # if all obs regular mask - beats cross loss
+                            loss_mask = struct_mask[self.net.out_inds[k]]
+                        if loss_mask.sum().item() != 0:
+                            l2 = masked_rec_loss(
+                                batch[k],
+                                outputs[k],
+                                loss=self.net.outputs[k],
+                                mask=loss_mask,
+                                warmup=self.warmup,
+                                obs_var=outputs[k + "_noise"]
+                                if "xb" in k and self.net.obs_noise
+                                else None,
+                                reduction="none",
+                                nll_beta=self.nll_beta,
+                            )
+                            wandb.log(
+                                {"x loss: ": cpu(torch.mean(l2[:, 0]))}, commit=False
+                            )
+                            wandb.log(
+                                {"y loss: ": cpu(torch.mean(l2[:, 1]))}, commit=False
+                            )
+
+                if not self.net.vae:
+                    z_reg = self.RAE_beta * torch.mean(eval_RAE_z_reg(outputs["z_mu"]))
+                else:
+                    vae_beta = self.vae_beta
+                    # beta param warmup first no KL then increase
+                    if self.vae_warmup:
+                        vae_beta *= np.clip(self._iter_count / self.vae_warmup, 0, 1)
+
+                    # KL term between posterior and prior
+                    # average over batch but sum over latent dimensions
+                    z_reg = torch.mean(
+                        torch.sum(
+                            vae_beta
+                            * eval_VAE_prior(
+                                outputs["z_mu"],
+                                outputs["z_lsig"],
+                                p_mu=0.0,
+                                p_lsig=np.log(self.prior_sig),
+                            ).sum(-1),
+                            1,
+                        )
+                    )
+
+                loss = r_loss + z_reg
+                wandb.log({"Train rec loss: ": cpu(r_loss)})
+                wandb.log({"KL loss: ": cpu(z_reg)}, commit=False)
+                wandb.log({"total loss: ": cpu(loss)}, commit=False)
+
+                if self.lasso_lambda:
+                    wmat_reg = sum(
+                        [self.gen_wm_prior.log_prob(W).sum() for W in self.gen_wmats]
+                    )
+                    # lasso loss to prevent overfitting on the weight matrices
+                    loss -= wmat_reg
+
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    self.opt_shared_pars, max_norm=self.grad_norm, norm_type=2
+                )
+                torch.nn.utils.clip_grad_norm_(
+                    self.opt_session_pars[batch["i"]],
+                    max_norm=self.grad_norm,
+                    norm_type=2,
+                )
+                self.optim_shared.step()
+                self.optims_session[batch["i"]].step()
+                self.optim_lasso.step()
+
+                # normalisation lasso loss for lasso_W sparse matrix
+                if self.lasso_lambda:
+                    # if the lasso matrix exists and column normalization is desired
+                    if self.net.lasso_mat and self.net.column_norm:
+                        # Calculate the L2 norm for each column in the weight matrix
+                        norm = torch.sqrt((self.net.lasso_W**2).sum(0))
+
+                        # Normalize each column of the weight matrix by its L2 norm,s
+                        # using a minimum value of 1e-16 for the norms to avoid division by zero
+                        self.net.lasso_W.data.div_(torch.clamp_min(norm, 1e-16)[None])
+
+                        # Perform L1 regularization:
+                        # Multiply each column of the weight matrix by the difference between
+                        # its original norm and a penalty term, which is the learning rate
+                        # times the regularization parameter. This difference is clamped to
+                        # a minimum of 0 to ensure the norms remain non-negative
+                        self.net.lasso_W.data.mul_(
+                            torch.clamp_min(
+                                norm - self.lasso_lr * self.lasso_lambda, 0
+                            )[None]
+                        )
+                    else:
+                        # Calculate the absolute value for each entry in the weight matrix
+                        norm = abs(self.net.lasso_W)
+
+                        # Normalize each entry of the weight matrix by its absolute value,
+                        # using a minimum value of 1e-16 for the norms to avoid division by zero
+                        self.net.lasso_W.data.div_(torch.clamp_min(norm, 1e-16))
+
+                        # Perform L1 regularization:
+                        # Multiply each entry of the weight matrix by the difference between
+                        # its absolute value and a penalty term, which is the learning rate
+                        # times the regularization parameter. This difference is clamped to
+                        # a minimum of 0 to ensure the norms remain non-negative
+                        self.net.lasso_W.data.mul_(
+                            torch.clamp_min(norm - self.lasso_lr * self.lasso_lambda, 0)
+                        )
+
+                tot_cost.append(
+                    cpu(r_loss + z_reg)
+                )  # change to total loss not just rec loss
+                separate_loss.append(r_sep_loss)
+                self._iter_count += 1
+
+            tot_t += time.time() - t0
+
+            updatetime = 1000 * (tot_t) / (self._iter_count - last_print)
+            last_print = self._iter_count
+            tot_t = 0
+
+            # ------------------------------------------------
+            #                    EVALUATION
+            # ------------------------------------------------
+
+            self.col_dict["cost_hist"].at[self._iter_count] = np.mean(tot_cost)
+            for ik, k in enumerate(self.net.outputs):
+                wandb.log(
+                    {
+                        f"Train rec loss {k}: ": np.mean(
+                            cpu(np.array(separate_loss)[:, ik])
+                        )
+                    }
+                )
+                if "xb" in k and self.net.obs_noise:
+                    wandb.log({f"Train obs var mean x {k}: ": cpu(obs_var_mean[ik][0])})
+                    wandb.log({f"Train obs var mean y {k}: ": cpu(obs_var_mean[ik][1])})
+                    wandb.log({f"Train obs var std x {k}: ": cpu(obs_var_std[ik][0])})
+                    wandb.log({f"Train obs var std y {k}: ": cpu(obs_var_std[ik][1])})
+
+            # "zmask_l1" logs the sum of the absolute values of the elements in the weight matrix.
+            # This is essentially the L1 norm of the weight matrix.
+            # It gives a measure of the total "magnitude" of the weights. When using L1 regularization,
+            # this value will tend to decrease, as the regularization pushes weights towards zero.
+            self.col_dict["zmask_l1"].at[self._iter_count] = np.sum(
+                cpu(abs(self.net.lasso_W))
+            )
+            # "zmask_l0" logs the number of non-zero elements in the weight matrix.
+            # This is done by first summing over all dimensions except the last one, and then finding the
+            # indices where this sum is non-zero.
+            # It gives a measure of the sparsity of the weight matrix. When using L1 regularization,
+            # this number will tend to increase, as the regularization pushes more weights to become zero.
+
+            self.col_dict["zmask_l0"].at[self._iter_count] = len(
+                np.apply_over_axes(
+                    np.sum, cpu(self.net.lasso_W), range(cpu(self.net.lasso_W).ndim - 1)
+                ).nonzero()[0]
+            )
+            self.col_dict["update_time"].at[self._iter_count] = updatetime
+
+            # MAIN EVALUAION FUNCTION
+            self.eval_func(data_train, data_val)
+
+            wandb.log(
+                {
+                    k: self.col_dict[k][self._iter_count]
+                    for k in ["cost_hist", "zmask_l0", "zmask_l1", "update_time"]
+                }
+            )
+            # check inputs to model
+            try:
+                wandb.log(
+                    {
+                        "Valid LogL/T x_m: ": self.col_dict["df_perf"][
+                            "xa_m", 0, "Valid", "Pred", "LogL/T"
+                        ][self._iter_count]
+                    },
+                    commit=False,
+                )
+            except KeyError as e:
+                print(f"KeyError: {e} - keys missing in col_dict")
+            try:
+                wandb.log(
+                    {
+                        "Valid RMSE dy pred: ": self.col_dict["df_perf"][
+                            "xb_y", 0, "Valid", "Pred", "RMSE"
+                        ][self._iter_count]
+                    },
+                    commit=False,
+                )
+            except KeyError as e:
+                print(f"KeyError: {e} - keys missing in col_dict")
+            try:
+                wandb.log(
+                    {
+                        "Train LogL/T x_m: ": self.col_dict["df_perf"][
+                            "xa_m", 0, "Train", "Pred", "LogL/T"
+                        ][self._iter_count]
+                    },
+                    commit=False,
+                )
+            except KeyError as e:
+                print(f"KeyError: {e} - keys missing in col_dict")
+            try:
+                wandb.log(
+                    {
+                        "Train RMSE dy pred: ": self.col_dict["df_perf"][
+                            "xb_y", 0, "Train", "Pred", "RMSE"
+                        ][self._iter_count]
+                    },
+                    commit=False,
+                )
+            except KeyError as e:
+                print(f"KeyError: {e} - keys missing in col_dict")
+
+            if print_output:
+                print(
+                    f"Cost: {self.col_dict['cost_hist'][self._iter_count]:0.3f}", end=""
+                )
+                print(f" || Time Upd.: {float(updatetime):0.1f} ms", end="")
+                print(f" || BatchNr.: {self._iter_count}", end="")
+
+                # Handle potential exceptions more explicitly
+                try:
+                    logl_t_value = self.col_dict["df_perf"][
+                        "xa_m", 0, "Valid", "Pred", "LogL/T"
+                    ][self._iter_count]
+                    print(f" || LogL/T x_m: {logl_t_value:0.3f}", end="")
+                except KeyError:
+                    pass  # Handle missing keys in col_dict
+
+                try:
+                    rmse_value = self.col_dict["df_perf"][
+                        "xb_y", 0, "Valid", "Pred", "RMSE"
+                    ][self._iter_count]
+                    print(f" || RMSE dy pred: {rmse_value:0.3f}", end="\n")
+                except KeyError:
+                    pass  # Handle missing keys in col_dict
+
+            sys.stdout.flush()
+
+            if self.filename:
+                self.col_dict["description"] = self.description
+                with open(self.filename + "/model.pkl", "wb") as f:
+                    torch.save(self, f)
+                with open(self.filename + "/model_dicts.pkl", "wb") as f:
+                    torch.save(self.col_dict, f)
+                with open(wandb.run.dir + "/model_dicts.pkl", "wb") as f:
+                    torch.save(self.col_dict, f)

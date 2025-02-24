@@ -2,9 +2,9 @@
 
 ### Purpose of this repostitory
 
-This repository contains research code for the [preprint](https://www.biorxiv.org/content/10.1101/2024.04.19.590082v1):   
- ***Modeling conditional distributions of neural and behavioral data with masked variational autoencoders***   
- by Schulz, Vetter, Gao, Morales, Lobato-Rios, Ramdya, Goncalves*, and Macke* (2024).
+This repository contains research code for the [paper](https://www.cell.com/cell-reports/abstract/S2211-1247(25)00109-3):   
+ ***Modeling conditional distributions of neural and behavioral data with masked variational autoencoders***  
+ by Schulz, Vetter, Gao, Morales, Lobato-Rios, Ramdya, Goncalves*, and Macke*. Cell Reports (2025).
 
 
 
@@ -12,6 +12,7 @@ This repository contains research code for the [preprint](https://www.biorxiv.or
 
 To run the scripts make sure to first install all the requirements. We recommend creating a conda environment first.
 A `GPU` is recommend but not necessary.
+
 
 
 ``` 
@@ -29,11 +30,25 @@ Make sure that the `Jupiter` package is also installed.
 Before running the training script for the simluated dataset (Gaussian Latent Variable Model), you need to generate the dataset which will be stored in `./data/glvm/`:
 
 ```
-cd notebooks
-python 00_GLVM_generate_dataset.py 
+cd notebooks/glvm/
+ipython 00_GLVM_generate_dataset.py 
 ```
 
-The python scripts to run the autoencoder training can be started directly from the base directory. Experiment tracking and saving with [Weights & Biases](https://wandb.ai/site) is supported, but disabled by default.
+
+### Fly walking behavior
+
+We made our dataset of walking behavior of flies (Drosophila melanogaster) publicly available at 
+https://zenodo.org/records/11002776. Please download it from there and store it in `./data/fly/`. Please ensure the download was successful using [04_FLY_read_in_data.ipynb](./notebooks/fly/04_FLY_read_in_data.ipynb) in `notebooks/fly/`
+
+### Monkey reach task 
+
+The monkey reach task uses data kindly shared by O'Doherty, Cardoso, Maki and Sabes at https://zenodo.org/records/583331. For the results in the preprint, we trained only on one session `loco_20170213_02`. 
+
+
+
+## Training the models 
+
+The python scripts to run the autoencoder training can be started directly from the base directory. Experiment tracking and saving with [Weights & Biases](https://wandb.ai/site) is supported, but disabled by default. E.g. for the GLVM dataset run:
 
 ```
 python scripts/run_GLVM.py
@@ -45,36 +60,22 @@ cd bash
 bash run_GLVM_many_seeds.sh
 ```
 
-See the notebooks [README](./notebooks/README.md) for further instructions for postprocessing and plotting of the results.
+See the additional [notebooks README](./notebooks/README.md) for further instructions for postprocessing, plotting of the results and reproducing the respective paper figures.
 
-### Fly walking behavior
-
-We made our dataset of walking behavior of flies (Drosophila melanogaster) publicly available at 
-https://zenodo.org/records/11002776. Please download it from there and store it in `./data/fly/`. Please ensure the download was successful using `04_FLY_read_in_data.ipynb`
-
-The python scripts to run the autoencoder training on the fly walking dataset can be called in the same way (coming soon!):
-```
-python scripts/run_fly.py
-```
-> Note: training the autoencoder for fly walking behavior will take substantially longer and training on a  `GPU` is recommended.
-
-### Monkey reach task 
-
-The monkey reach task uses data kindly shared by O'Doherty, Cardoso, Maki and Sabes at https://zenodo.org/records/583331. For the results in the preprint, we trained only on one session `loco_20170213_02`. The scripts for training and evalution on this task will come soon.
-
-
-> Note that this repository is work in progress. 
+The added letter 'R_' in the file names, indicates differences between the [preprint](https://www.biorxiv.org/content/10.1101/2024.04.19.590082v1)  and the [published](https://www.cell.com/cell-reports/abstract/S2211-1247(25)00109-3) version of this manuscript. 
 
 ## Citation
 
 ```
-@article{schulz_2024_conditional,
-	author = {Auguste Schulz and Julius Vetter and Richard Gao and Daniel Morales and Victor Lobato-Rios and Pavan Ramdya and Pedro J. Gon{\c{c}}alves and Jakob H. Macke},  
+@article{schulz_2025_conditional,
 	title = {Modeling conditional distributions of neural and behavioral data with masked variational autoencoders},  
-	year = {2024},  
-	doi = {10.1101/2024.04.19.590082},  
-	publisher = {Cold Spring Harbor Laboratory},  
-	journal = {bioRxiv}  
+	author = {Schulz, Auguste and Vetter, Julius and Gao, Richard and Morales, Daniel and Lobato-Rios, Victor and Ramdya, Pavan and Gon{\c{c}}alves, Pedro J. and Macke, Jakob H.},  
+	journal = {Cell Reports},  
+	year = {2025},
+	volume = {44},
+	number = {3},
+	url = {https://www.cell.com/cell-reports/abstract/S2211-1247(25)00109-3},
+	doi = {10.1016/j.celrep.2025.115338},
 }
 ```
 ## Contact

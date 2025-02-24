@@ -18,8 +18,9 @@
 #                                                              #
 #                                                              #
 ################################################################
-
-get_ipython().run_line_magic("cd", "../")
+# pylint: disable=undefined-variable
+get_ipython().run_line_magic("cd", "../../")
+# pylint: enable=undefined-variable
 
 import copy
 import logging
@@ -48,7 +49,9 @@ from maskedvae.utils.utils import return_args
 
 logging.getLogger("matplotlib.font_manager").disabled = True
 
+# pylint: disable=undefined-variable
 get_ipython().run_line_magic("matplotlib", "inline")
+# pylint: enable=undefined-variable
 
 
 # folder name for evaluation
@@ -214,7 +217,6 @@ plt.tight_layout()
 # save the figure
 file_name = f"Pan_a_vertical_schematic_latent_and_conditional_distribution"
 
-os.makedirs(f"{drop_dir}/figures/", exist_ok=True)
 # Save the figure
 plt.savefig(f"{drop_dir}/figures/{file_name}.pdf")
 plt.savefig(f"{drop_dir}/figures/{file_name}.png")
@@ -389,9 +391,6 @@ for data_cond in [
 #                                                #
 ##################################################
 
-import math
-
-import scipy.stats as stats
 
 idx_data = 129
 data_cond = map_conditions[1]
@@ -555,7 +554,6 @@ mean_masked_all = []
 mean_naive_mask = []
 mean_naive_all = []
 for ds in range(10):
-    # median kld [mask_id][maskcondition][dataset condition][seed]
     median_naive_all.append(median_kld_dict[3]["zero_imputation"][ds][0])
     median_masked_all.append(
         median_kld_dict[3]["zero_imputation_mask_concatenated_encoder_only"][ds][0]
@@ -589,7 +587,6 @@ f, axs = plt.subplots(
     1, 2, constrained_layout=True, sharey=False, figsize=cm2inch((5.5, 3.5))
 )
 plt.subplots_adjust(wspace=4.5)
-# axs=axs.reshape(-1)
 f.tight_layout()
 # Create an array with the colors you want to use
 colors = ["lightsteelblue", "salmon", "steelblue", "darkred"]
@@ -625,9 +622,7 @@ else:
     aggregate_tag = "mean"
     data_arr_kld = [mean_naive_mask, mean_masked_mask]
 
-sns.swarmplot(
-    data=data_arr_kld, color=".25", size=1, ax=axs[1]
-)  # , ax=ax1), labels=["dataset/mask"]
+sns.swarmplot(data=data_arr_kld, color=".25", size=1, ax=axs[1])
 sns.boxplot(
     data=data_arr_kld, palette=customPalette, width=0.6, ax=axs[1], showfliers=False
 )
@@ -770,14 +765,12 @@ for id, idx_dat in enumerate(choices):
     )
     axs[id].spines["left"].set_position(("outward", 4))
     axs[id].spines["bottom"].set_position(("outward", 4))
-    # axs[idx_dat].set_xlabel(f"x{idx_dat}")
     axs[id].set_ylabel("")
 
     # get maximum value on y axis
     y_max = axs[id].get_ylim()[1]
     if y_max < 0.5:
         axs[id].set_yticks([0, 0.2])
-    # axs[id].set_yticks([0,0.2])
 axs[0].set_ylabel("pdf")
 plt.legend(ncol=1, loc="center left", bbox_to_anchor=(1, 0.5))
 
@@ -797,7 +790,6 @@ plt.savefig(f"{local_dir}/figures/{file_name}.png")
 #         calibration metrics                    #
 #                                                #
 ##################################################
-import pickle
 
 with open(f"{local_dir}/calibration.pkl", "rb") as f:
     calibration = pickle.load(f)
@@ -809,7 +801,6 @@ with open(f"{local_dir}/calibration_masked.pkl", "rb") as f:
 
 fig, axs = plt.subplots(1, 1, figsize=cm2inch((5, 3.5)), sharey=True)
 meth = "zero_imputation_mask_concatenated_encoder_only"
-# axi,mask_id = 1,3
 label = [95, 90, 80, 60]
 axs.plot(label, [lab / 100 for lab in label], "black")
 
@@ -834,9 +825,7 @@ for data_cond in [
                     ms=1,
                     alpha=0.3,
                     color=col_dct[meth][1],
-                    label="masked"
-                    # if percentile == 95 and q == 0 and mask_id == 1 and data_cond == 1
-                    # else "",
+                    label="masked",
                 )
                 meth = "zero_imputation"
                 axs.plot(
@@ -851,8 +840,6 @@ for data_cond in [
                     alpha=0.3,
                     color=col_dct[meth][1],
                     label="naive",
-                    # if percentile == 95 and q == 0 and mask_id == 1 and data_cond == 1
-                    # else "",
                 )
 axs.set_xlabel("percentile")
 axs.set_xticks(label)
@@ -862,7 +849,6 @@ axs.set_ylabel(r"% in n$^{\mathrm{th}}$ perc.")
 # ensure unique labels in legend
 handles, labels = axs.get_legend_handles_labels()
 by_label = dict(zip(labels, handles))
-# axs.legend(by_label.values(), by_label.keys(), loc="upper left")
 
 axs.legend(
     by_label.values(), by_label.keys(), bbox_to_anchor=(1.01, 1.0), frameon=False
@@ -893,7 +879,7 @@ plt.savefig(f"{local_dir}/figures/{file_name}.png")
 col_map = "viridis"
 meth = "zero_imputation_mask_concatenated_encoder_only"
 
-for data_cond in [map_conditions[1]]:  # condition]:  # data condition
+for data_cond in [map_conditions[1]]:  # data condition
     for mask_id in [1, 3]:  # masks 1 and 3 (all observed)
 
         real_cov_x = np.cov(test_data[mask_id][meth][data_cond][seed][:lim, :].T)
@@ -997,13 +983,10 @@ for data_cond in [0, 1, 2]:  # just plot data for one dataset
     ]
 
     plt.tight_layout(pad=0.8, w_pad=3.5, h_pad=1.8)
-    sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[data_cond, 0])  # , ax=ax1)
+    sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[data_cond, 0])
     sns.boxplot(
         data=data_arr, color=".8", palette="Reds", width=0.5, ax=axs[data_cond, 0]
-    )  # , ax=ax1)
-    # sns.scatterplot(
-    #     x=[0, 1, 2, 3], y=gt_var, s=15, color=".5", marker="s", ax=axs[data_cond, 0]
-    # )  # ,label="analytical")
+    )
 
     sns.scatterplot(
         x=[0, 1, 2, 3],
@@ -1021,8 +1004,6 @@ for data_cond in [0, 1, 2]:  # just plot data for one dataset
     axs[data_cond, 0].locator_params(axis="x", nbins=nbins)
     axs[data_cond, 0].locator_params(axis="y", nbins=nbins)
 
-    # meth = "zero_imputation"
-
     plt.tight_layout(pad=0.8, w_pad=3.5, h_pad=1.8)
     meth = "zero_imputation"
     data_arr = [
@@ -1032,10 +1013,10 @@ for data_cond in [0, 1, 2]:  # just plot data for one dataset
         var_dict[idx3][meth][data_cond],
     ]
 
-    sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[data_cond, 1])  # , ax=ax1)
+    sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[data_cond, 1])
     sns.boxplot(
         data=data_arr, color=".8", palette="Blues", width=0.5, ax=axs[data_cond, 1]
-    )  # , ax=ax1) ax=axs[1])#, ax=ax1)
+    )
     sns.scatterplot(
         x=[0, 1, 2, 3],
         y=gt_var,
@@ -1118,7 +1099,6 @@ for data_cond in [
 
 fig, axs = plt.subplots(2, 2, sharey=False, sharex=True, figsize=cm2inch((5, 4)))
 
-# plt.subplots_adjust(wspace=4.5)
 axs = axs.reshape(-1)
 fig.tight_layout()
 
@@ -1193,11 +1173,8 @@ data_arr = [
 
 
 plt.tight_layout(pad=0.8, w_pad=3.5, h_pad=1.8)
-sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[0])  # , ax=ax1)
-sns.boxplot(
-    data=data_arr, color=".8", palette="Reds", width=0.5, ax=axs[0]
-)  # , ax=ax1)
-
+sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[0])
+sns.boxplot(data=data_arr, color=".8", palette="Reds", width=0.5, ax=axs[0])
 nbins = 4
 axs[0].set_xticks([0, 1, 2, 3])
 axs[0].set_xticklabels(["all", "mask\n1", "mask\n2", "mask\n3"])
@@ -1205,8 +1182,6 @@ axs[0].set_ylabel("MSE gt and predicted\nposterior mean")
 axs[0].locator_params(axis="x", nbins=nbins)
 axs[0].locator_params(axis="y", nbins=nbins)
 
-
-# meth = "zero_imputation"
 
 data_cond = map_conditions[1]
 
@@ -1219,10 +1194,8 @@ data_arr = [
     latent_mse_data_dict[idx3][meth][data_cond],
 ]
 
-sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[1])  # , ax=ax1)
-sns.boxplot(
-    data=data_arr, color=".8", palette="Blues", width=0.5, ax=axs[1]
-)  # , ax=ax1) ax=axs[1])#, ax=ax1)
+sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[1])
+sns.boxplot(data=data_arr, color=".8", palette="Blues", width=0.5, ax=axs[1])
 
 
 axs[1].set_xticks([0, 1, 2, 3])
@@ -1250,7 +1223,6 @@ f, axs = plt.subplots(
     2, 1, constrained_layout=True, sharey=False, sharex=True, figsize=cm2inch((7, 7))
 )
 plt.subplots_adjust(wspace=4.5)
-# axs=axs.reshape(-1)
 f.tight_layout()
 
 # condition dataset
@@ -1267,10 +1239,8 @@ data_arr = [
 
 
 plt.tight_layout(pad=0.8, w_pad=3.5, h_pad=1.8)
-sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[0])  # , ax=ax1)
-sns.boxplot(
-    data=data_arr, color=".8", palette="Reds", width=0.5, ax=axs[0]
-)  # , ax=ax1)
+sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[0])
+sns.boxplot(data=data_arr, color=".8", palette="Reds", width=0.5, ax=axs[0])
 
 nbins = 4
 axs[0].set_xticks([0, 1, 2, 3])
@@ -1279,8 +1249,6 @@ axs[0].set_ylabel("MSE")  # gt and predicted\nposterior mean")
 axs[0].locator_params(axis="x", nbins=nbins)
 axs[0].locator_params(axis="y", nbins=nbins)
 
-
-# meth = "zero_imputation"
 
 data_cond = map_conditions[1]
 
@@ -1293,15 +1261,12 @@ data_arr = [
     latent_mse_data_dict[idx3][meth][data_cond],
 ]
 
-sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[1])  # , ax=ax1)
-sns.boxplot(
-    data=data_arr, color=".8", palette="Blues", width=0.5, ax=axs[1]
-)  # , ax=ax1) ax=axs[1])#, ax=ax1)
+sns.swarmplot(data=data_arr, color=".25", size=2, ax=axs[1])
+sns.boxplot(data=data_arr, color=".8", palette="Blues", width=0.5, ax=axs[1])
 
 
 axs[1].set_xticks([0, 1, 2, 3])
 axs[1].set_xticklabels(["all", "mask\n1", "mask\n2", "mask\n3"])
-# axs[1].set_ylabel("posterior\n variance")
 axs[1].locator_params(axis="x", nbins=nbins)
 axs[1].locator_params(axis="y", nbins=nbins)
 axs[1].legend()
@@ -1362,9 +1327,7 @@ if generate_calibration:
         for data_cond in range(n_conditions):
             for mask_id in [0, 1, 2, 3]:  # range(n_masks[]):
                 for meth in methods:
-                    lat_mean = mean_dict[mask_id][meth][data_cond][
-                        q
-                    ].flatten()  # np.repeat(x_sample.cpu().data.numpy(), n_samples, axis=0)
+                    lat_mean = mean_dict[mask_id][meth][data_cond][q].flatten()
                     lat_sigma = np.sqrt(full_variance[mask_id][meth][data_cond][q])
                     batch_size = len(lat_mean)
                     # sample each value n_sample times
@@ -1382,9 +1345,7 @@ if generate_calibration:
                     )
 
                     # for the fixed generative model retrieve the correct observation noise std
-                    recon_var = noise_list[mask_id][
-                        data_cond
-                    ]  # noise_list[mask_id][data_cond]*noise_list[mask_id][data_cond]
+                    recon_var = noise_list[mask_id][data_cond]
                     # repeat the noise term batch * n_samples times
                     recon_var = np.repeat(recon_var, recon_batch.shape[1], axis=1)
                     # sample from the observation model for each variable - flatten for faster sampling
@@ -1394,7 +1355,7 @@ if generate_calibration:
                     # bring into the correct shape again: data dim, batch_size, n_samples
                     data_recons = data_recons.reshape(
                         model.args.x_dim, batch_size, n_samples
-                    )  # model.args.x_dim,n_samples,-1)
+                    )
                     print("\n data_recons \n", data_recons.shape)
 
                     lower = [2.5, 5, 10, 20]
@@ -1452,7 +1413,6 @@ if generate_calibration:
                         )
 
     # store calibration data
-    import pickle
 
     with open(f"{local_dir}/data/calibration.pkl", "wb") as f:
         pickle.dump(calibration, f)

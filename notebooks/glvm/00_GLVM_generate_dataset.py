@@ -107,27 +107,20 @@ for c_id, (C, noise) in enumerate(zip(c_list, noise_list)):
         )
         flag = "_shorttest"
 
+    # %%
     # save the datasets
-    datapath = "../data/glvm/{:d}_dim_{:d}_dim/".format(args.x_dim, args.z_dim)
+
+    def save_dataset(dataset, foldername, name, c_id, flag):
+        filepath = f"{foldername}{name}_{c_id}{flag}.pt"
+        torch.save(dataset, filepath)
+
+    # save the datasets
+    datapath = f"../../data/glvm/{args.x_dim}_dim_{args.z_dim}_dim/"
     os.makedirs(os.path.dirname(datapath), exist_ok=True)
 
-    torch.save(
-        dataset_train,
-        "../data/glvm/{:d}_dim_{:d}_dim/data_train_{:d}{:s}.pt".format(
-            args.x_dim, args.z_dim, c_id, flag
-        ),
-    )
-    torch.save(
-        dataset_valid,
-        "../data/glvm/{:d}_dim_{:d}_dim/data_valid_{:d}{:s}.pt".format(
-            args.x_dim, args.z_dim, c_id, flag
-        ),
-    )
-    torch.save(
-        dataset_test,
-        "../data/glvm/{:d}_dim_{:d}_dim/data_test_{:d}{:s}.pt".format(
-            args.x_dim, args.z_dim, c_id, flag
-        ),
-    )
+    save_dataset(dataset_train, datapath, "data_train", c_id, flag)
+    save_dataset(dataset_valid, datapath, "data_valid", c_id, flag)
+    save_dataset(dataset_test, datapath, "data_test", c_id, flag)
+
 
 # %%

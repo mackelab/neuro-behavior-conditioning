@@ -6,7 +6,7 @@ forw_backw: True # rnn forward and backward
 latent_size: 20 # latent space
 mask_passed: 0 # pass mask to encoder
 nonlin: 1 # nonlinearity
-obs_noise: True # observation noise for behavior
+obs_noise: False # observation noise for behavior
 
 # training parameters
 seed: 1
@@ -24,7 +24,7 @@ zero_imp: 0 # zero imputation
 masktype: all_obs
 
 # wandb specific
-project_name: Main_MONKEY_Reach_task_Cond_Paper
+project_name: Revision_monkey_latents
 exp: std # wand experiment name
 
 # postprocessing
