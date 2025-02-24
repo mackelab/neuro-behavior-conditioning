@@ -10,7 +10,7 @@ for s in {104..110}; do
       date
       echo "Done waiting... next seed $s and latent $i"
   done # done latent dim
-done # done seed
+done # done seeds
 
 echo " "
 echo "Done training..."

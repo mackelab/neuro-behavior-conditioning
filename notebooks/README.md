@@ -21,7 +21,7 @@ O'Doherty, J. E., Cardoso, M. M. B., Makin, J. G., & Sabes, P. N. (2017). Nonhum
 ## Additional Information for running the Gaussian Latent Variable Model & Analyses 
 
 
-You can either run the respective files in an **interactive window, e.g. in VS Code** or via commandline: e.g.
+You can either run the respective files in an **interactive window, e.g. in VS Code** or via commandline, e.g.:
 
 ```
 ipython 02_GLVM_paper_figures.py

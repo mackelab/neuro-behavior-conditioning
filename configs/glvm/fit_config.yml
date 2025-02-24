@@ -33,7 +33,7 @@ list_len: 3 # number of different dataset parameters
 loss_type: regular
 masked: true
 mean_impute: 0
-method: 0 # method choose one of them from commandline     methods = [0 : 'zero_imputation_mask_concatenated',1: 'zero_imputation', 2: 'zero_imputation_baselined',3: 'zero_imputation_mask_concatenated_encoder_only']
+method: 0 # method choose one of them from commandline / methods = [0 : 'zero_imputation_mask_concatenated',1: 'zero_imputation', 2: 'zero_imputation_baselined',3: 'zero_imputation_mask_concatenated_encoder_only']
 n_data_dims: 20
 n_hidden: 60
 n_masked_vals: 10

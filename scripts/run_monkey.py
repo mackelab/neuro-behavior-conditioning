@@ -474,4 +474,4 @@ if __name__ == "__main__":
 
                 main(args)
 
-# python run_monkey.py --offline 0 --cross_loss 0 --latent_size 40 --seed 110 --max_iters 200
+# python run_monkey.py --offline 1 --cross_loss 0 --latent_size 40 --seed 110 --max_iters 200

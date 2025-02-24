@@ -97,8 +97,7 @@ class ModelGLVM(object):
         self.dropout = dropout
         print(self.args)
 
-        print("Run model")
-
+        # set up dataloaders
         self.train_loader = DataLoader(
             dataset=dataset_train,
             batch_size=self.args.batch_size,
